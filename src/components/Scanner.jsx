@@ -89,12 +89,22 @@ const Scanner = ({ onScan, onClose }) => {
 
             <div className="flex-grow-1 d-flex flex-column align-items-center justify-content-center">
                 {error ? (
-                    <div className="text-center p-4">
-                        <div className="text-danger mb-3">
-                            <RefreshCw size={48} />
+                    <div className="text-center p-4 glass-card mx-3" style={{ maxWidth: '400px', backgroundColor: 'rgba(239, 68, 68, 0.1)', borderColor: 'rgba(239, 68, 68, 0.2)' }}>
+                        <div className="text-danger mb-4">
+                            <RefreshCw size={56} className="animate-pulse" />
                         </div>
-                        <p className="text-white fw-bold mb-3">{error}</p>
-                        <Button variant="outline-light" onClick={() => window.location.reload()}>Qayta yuklash</Button>
+                        <h4 className="text-white fw-bold mb-3">Kameraga ruxsat berilmadi</h4>
+                        <div className="text-white-50 small mb-4 text-start">
+                            <p className="mb-2">Dastur ishlashi uchun kameradan foydalanishga ruxsat berishingiz kerak. Ruxsatni qayta yoqish uchun:</p>
+                            <ol className="ps-3 mb-0">
+                                <li className="mb-1">Brauzerning manzil satridagi (tepadagi) <b>qulf (lock)</b> ikonkasini bosing.</li>
+                                <li className="mb-1"><b>"Camera"</b> (yoki "Kamera") bo'limini toping va uni yoqing.</li>
+                                <li>Sahifani yangilang (F5).</li>
+                            </ol>
+                        </div>
+                        <Button variant="success" className="w-100 py-3 rounded-3 fw-bold shadow-sm" onClick={() => window.location.reload()}>
+                            Sahifani yangilash
+                        </Button>
                     </div>
                 ) : (
                     <div className="position-relative w-100 overflow-hidden rounded-5 shadow-2xl bg-black" style={{ maxWidth: '400px', aspectRatio: '1/1' }}>
