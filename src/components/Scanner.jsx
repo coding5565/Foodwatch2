@@ -6,9 +6,14 @@ import { Button, Card } from 'react-bootstrap';
 const Scanner = ({ onScan, onClose }) => {
     const [isInitializing, setIsInitializing] = useState(true);
     const [error, setError] = useState(null);
+    const [rawError, setRawError] = useState("");
     const scannerRef = useRef(null);
 
-    useEffect(() => {
+    const startScanner = async () => {
+        setIsInitializing(true);
+        setError(null);
+        setRawError("");
+
         const html5QrCode = new Html5Qrcode("reader");
         scannerRef.current = html5QrCode;
 
@@ -27,34 +32,45 @@ const Scanner = ({ onScan, onClose }) => {
             ]
         };
 
-        const startScanner = async () => {
-            try {
-                await html5QrCode.start(
-                    { facingMode: "environment" },
-                    config,
-                    (decodedText) => {
-                        html5QrCode.stop().then(() => {
-                            onScan(decodedText);
-                        }).catch(() => onScan(decodedText));
-                    },
-                    () => { }
-                );
-                setIsInitializing(false);
-            } catch (err) {
-                console.error("Unable to start scanner", err);
-                setError("Kameraga ulanishda xatolik yuz berdi. Iltimos, brauzer sozlamalaridan ruxsat berilganini tekshiring.");
-                setIsInitializing(false);
-            }
-        };
+        try {
+            await html5QrCode.start(
+                { facingMode: "environment" },
+                config,
+                (decodedText) => {
+                    html5QrCode.stop().then(() => {
+                        onScan(decodedText);
+                    }).catch(() => onScan(decodedText));
+                },
+                () => { }
+            );
+            setIsInitializing(false);
+        } catch (err) {
+            console.error("Scanner Error:", err);
+            setRawError(err.toString());
+            setError("Kameraga ulanishda xatolik yuz berdi.");
+            setIsInitializing(false);
+        }
+    };
 
+    const testHardware = async () => {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+            stream.getTracks().forEach(track => track.stop());
+            alert("Kamera hardware darajasida ishlayapti! Muammo brauzer sozlamalarida yoki skaner kutubxonasida.");
+            startScanner();
+        } catch (err) {
+            alert("Hardware xatosi: " + err.message + "\n\nBu brauzer sizga kamerani ishlatishga ruxsat bermayotganini tasdiqlaydi.");
+        }
+    };
+
+    useEffect(() => {
         startScanner();
-
         return () => {
             if (scannerRef.current && scannerRef.current.isScanning) {
                 scannerRef.current.stop().catch(err => console.error("Error on unmount stop", err));
             }
         };
-    }, [onScan]);
+    }, []);
 
     return (
         <div className="position-fixed top-0 start-0 w-100 h-100 d-flex flex-column p-4 z-idx-100" style={{ backgroundColor: 'rgba(15, 23, 42, 0.98)', backdropFilter: 'blur(15px)', zIndex: 2000 }}>
@@ -84,10 +100,18 @@ const Scanner = ({ onScan, onClose }) => {
                         <h4 className="text-white fw-bold mb-3">Kameraga ruxsat berilmadi</h4>
                         <div className="text-white-50 small mb-4 text-start">
                             <p className="mb-2">Dastur ishlashi uchun kameradan foydalanishga ruxsat berishingiz kerak.</p>
-                            <p className="mb-0">Agarda ruxsat berishda muammo bo'lsa, brauzer sozlamalaridan kamerani yoqib, sahifani yangilang.</p>
+                            <p className="mb-3 text-danger fw-bold" style={{ fontSize: '10px' }}>Texnik xato: {rawError || "Noma'lum"}</p>
+
+                            <div className="p-3 bg-white bg-opacity-5 rounded-3 mb-3 border border-white border-opacity-10">
+                                <p className="mb-0 fw-bold text-white fs-6">Eng oson yechim:</p>
+                                <p className="mb-0">Agarda siz <b>localhost</b> ishlatmayotgan bo'lsangiz (masalan telefoningizdan IP orqali kirgan bo'lsangiz), brauzer kamerani bloklaydi. Faqat <b>HTTPS</b> yoki <b>localhost</b>'da ishlaydi.</p>
+                            </div>
                         </div>
-                        <Button variant="success" className="w-100 py-3 rounded-3 fw-bold shadow-sm" onClick={() => window.location.reload()}>
-                            Sahifani yangilash
+                        <Button variant="success" className="w-100 py-3 rounded-3 fw-bold shadow-sm mb-2" onClick={() => startScanner()}>
+                            Qayta urinish
+                        </Button>
+                        <Button variant="outline-light" className="w-100 py-2 rounded-3 fw-bold opacity-75" size="sm" onClick={testHardware}>
+                            Test: Kamerani tekshirish
                         </Button>
                     </div>
                 ) : (
