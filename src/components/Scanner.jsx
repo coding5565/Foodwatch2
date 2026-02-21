@@ -4,28 +4,45 @@ import { X, Camera, ShieldCheck, RefreshCw } from 'lucide-react';
 import { Button, Card } from 'react-bootstrap';
 
 const Scanner = ({ onScan, onClose }) => {
-    const [isInitializing, setIsInitializing] = useState(true);
+    const [isInitializing, setIsInitializing] = useState(false);
     const [error, setError] = useState(null);
+    const [hasStarted, setHasStarted] = useState(false);
+    const [permissionState, setPermissionState] = useState('prompt'); // 'prompt', 'granted', 'denied'
     const scannerRef = useRef(null);
 
     useEffect(() => {
-        // We use the direct Html5Qrcode API for better performance and control
+        // Check permission state on mount
+        if (navigator.permissions && navigator.permissions.query) {
+            navigator.permissions.query({ name: 'camera' })
+                .then(result => {
+                    setPermissionState(result.state);
+                    result.onchange = () => setPermissionState(result.state);
+                }).catch(err => {
+                    console.error("Permission query not supported", err);
+                });
+        }
+    }, []);
+
+    const startScanner = async () => {
+        setIsInitializing(true);
+        setError(null);
+
+        // Cleanup existing if any
+        if (scannerRef.current && scannerRef.current.isScanning) {
+            await scannerRef.current.stop().catch(() => { });
+        }
+
         const html5QrCode = new Html5Qrcode("reader");
         scannerRef.current = html5QrCode;
 
         const config = {
-            fps: 20, // Increased FPS for faster recognition
+            fps: 25,
             qrbox: (viewfinderWidth, viewfinderHeight) => {
-                // Dynamic QR box for better focus on different screens
                 const minEdgeSize = Math.min(viewfinderWidth, viewfinderHeight);
                 const qrboxSize = Math.floor(minEdgeSize * 0.7);
-                return {
-                    width: qrboxSize,
-                    height: qrboxSize
-                };
+                return { width: qrboxSize, height: qrboxSize };
             },
             aspectRatio: 1.0,
-            // Focus on QR and barcode formats
             formatsToSupport: [
                 Html5QrcodeSupportedFormats.QR_CODE,
                 Html5QrcodeSupportedFormats.EAN_13,
@@ -33,40 +50,33 @@ const Scanner = ({ onScan, onClose }) => {
             ]
         };
 
-        const startScanner = async () => {
-            try {
-                await html5QrCode.start(
-                    { facingMode: "environment" },
-                    config,
-                    (decodedText) => {
-                        // Stop scanner immediately on success to prevent multiple scans
-                        html5QrCode.stop().then(() => {
-                            onScan(decodedText);
-                        }).catch(err => {
-                            console.error("Error stopping scanner", err);
-                            onScan(decodedText);
-                        });
-                    },
-                    (errorMessage) => {
-                        // Standard scanning logs (ignored)
-                    }
-                );
-                setIsInitializing(false);
-            } catch (err) {
-                console.error("Unable to start scanner", err);
-                setError("Kameraga ulanishda xatolik yuz berdi. Iltimos, ruxsat berilganini tekshiring.");
-                setIsInitializing(false);
-            }
-        };
+        try {
+            await html5QrCode.start(
+                { facingMode: "environment" },
+                config,
+                (decodedText) => {
+                    html5QrCode.stop().then(() => {
+                        onScan(decodedText);
+                    }).catch(() => onScan(decodedText));
+                },
+                () => { }
+            );
+            setIsInitializing(false);
+            setHasStarted(true);
+        } catch (err) {
+            console.error("Unable to start scanner", err);
+            setError("Kameraga ulanishda xatolik yuz berdi. Iltimos, ruxsat berilganini tekshiring.");
+            setIsInitializing(false);
+        }
+    };
 
-        startScanner();
-
+    useEffect(() => {
         return () => {
             if (scannerRef.current && scannerRef.current.isScanning) {
                 scannerRef.current.stop().catch(err => console.error("Error on unmount stop", err));
             }
         };
-    }, [onScan]);
+    }, []);
 
     return (
         <div className="position-fixed top-0 start-0 w-100 h-100 d-flex flex-column p-4 z-idx-100" style={{ backgroundColor: 'rgba(15, 23, 42, 0.98)', backdropFilter: 'blur(15px)', zIndex: 2000 }}>
@@ -106,6 +116,23 @@ const Scanner = ({ onScan, onClose }) => {
                             Sahifani yangilash
                         </Button>
                     </div>
+                ) : !hasStarted ? (
+                    <div className="text-center p-5 glass-card mx-3" style={{ maxWidth: '400px' }}>
+                        <div className="bg-success bg-opacity-10 p-4 rounded-circle mx-auto mb-4" style={{ width: '100px', height: '100px' }}>
+                            <Camera size={52} className="text-success" />
+                        </div>
+                        <h3 className="text-white fw-bold mb-3">Kamerani yoqing</h3>
+                        <p className="text-white-50 small mb-5">Skanerlashni boshlash uchun "Ruxsat Berish" tugmasini bosing va kameraga ruxsat bering.</p>
+                        <Button
+                            variant="success"
+                            size="lg"
+                            className="w-100 py-3 rounded-4 fw-black shadow-lg"
+                            onClick={startScanner}
+                            disabled={isInitializing}
+                        >
+                            {isInitializing ? 'Yuklanmoqda...' : 'Ruxsat Berish & Skanerlash'}
+                        </Button>
+                    </div>
                 ) : (
                     <div className="position-relative w-100 overflow-hidden rounded-5 shadow-2xl bg-black" style={{ maxWidth: '400px', aspectRatio: '1/1' }}>
                         {isInitializing && (
@@ -127,10 +154,12 @@ const Scanner = ({ onScan, onClose }) => {
                     </div>
                 )}
 
-                <div className="mt-5 text-center px-4">
-                    <p className="text-white fw-bold fs-5 mb-1">Position the QR code</p>
-                    <p className="text-white-50 small mb-0">Biz yaratgan mahsulot kodlarini kameraga yaqinroq tuting.</p>
-                </div>
+                {hasStarted && !error && (
+                    <div className="mt-5 text-center px-4">
+                        <p className="text-white fw-bold fs-5 mb-1">Position the QR code</p>
+                        <p className="text-white-50 small mb-0">Biz yaratgan mahsulot kodlarini kameraga yaqinroq tuting.</p>
+                    </div>
+                )}
             </div>
 
             {/* Footer Instructions */}
@@ -140,9 +169,9 @@ const Scanner = ({ onScan, onClose }) => {
                         <ShieldCheck size={20} />
                     </div>
                     <div>
-                        <p className="text-white small fw-bold mb-1">Smart Parsing Active</p>
+                        <p className="text-white small fw-bold mb-1">Safe Scanner</p>
                         <p className="text-white-50 mb-0" style={{ fontSize: '11px', lineHeight: '1.4' }}>
-                            Dastur endi JSON kodlarni tezroq taniy Oladi (20 FPS). Agar tanimasa, yorug'lik yetarli ekaniga ishonch hosil qiling.
+                            Dastur ma'lumotlaringizni xavfsiz saqlaydi. Faqat skanerlash jarayonida kameradan foydalanadi.
                         </p>
                     </div>
                 </div>
