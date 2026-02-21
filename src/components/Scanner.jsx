@@ -27,30 +27,48 @@ const Scanner = ({ onScan, onClose }) => {
         setIsInitializing(true);
         setError(null);
 
-        // Cleanup existing if any
-        if (scannerRef.current && scannerRef.current.isScanning) {
-            await scannerRef.current.stop().catch(() => { });
-        }
-
-        const html5QrCode = new Html5Qrcode("reader");
-        scannerRef.current = html5QrCode;
-
-        const config = {
-            fps: 25,
-            qrbox: (viewfinderWidth, viewfinderHeight) => {
-                const minEdgeSize = Math.min(viewfinderWidth, viewfinderHeight);
-                const qrboxSize = Math.floor(minEdgeSize * 0.7);
-                return { width: qrboxSize, height: qrboxSize };
-            },
-            aspectRatio: 1.0,
-            formatsToSupport: [
-                Html5QrcodeSupportedFormats.QR_CODE,
-                Html5QrcodeSupportedFormats.EAN_13,
-                Html5QrcodeSupportedFormats.CODE_128
-            ]
-        };
+        // 10 second timeout to prevent infinite "Yuklanmoqda..." state
+        const timeoutId = setTimeout(() => {
+            if (isInitializing) {
+                setIsInitializing(false);
+                setError("Kamera yuklanishi juda uzoq davom etmoqda. Iltimos, sahifani yangilang yoki kamerangiz boshqa dasturda ishlatilmayotganiga ishonch hosil qiling.");
+                if (scannerRef.current) {
+                    scannerRef.current.stop().catch(() => { });
+                }
+            }
+        }, 10000);
 
         try {
+            // Cleanup existing if any
+            if (scannerRef.current) {
+                try {
+                    if (scannerRef.current.isScanning) {
+                        await scannerRef.current.stop();
+                    }
+                    scannerRef.current.clear();
+                } catch (e) {
+                    console.log("Cleanup error (ignored)", e);
+                }
+            }
+
+            const html5QrCode = new Html5Qrcode("reader");
+            scannerRef.current = html5QrCode;
+
+            const config = {
+                fps: 25,
+                qrbox: (viewfinderWidth, viewfinderHeight) => {
+                    const minEdgeSize = Math.min(viewfinderWidth, viewfinderHeight);
+                    const qrboxSize = Math.floor(minEdgeSize * 0.7);
+                    return { width: qrboxSize, height: qrboxSize };
+                },
+                aspectRatio: 1.0,
+                formatsToSupport: [
+                    Html5QrcodeSupportedFormats.QR_CODE,
+                    Html5QrcodeSupportedFormats.EAN_13,
+                    Html5QrcodeSupportedFormats.CODE_128
+                ]
+            };
+
             await html5QrCode.start(
                 { facingMode: "environment" },
                 config,
@@ -61,11 +79,22 @@ const Scanner = ({ onScan, onClose }) => {
                 },
                 () => { }
             );
+
+            clearTimeout(timeoutId);
             setIsInitializing(false);
             setHasStarted(true);
         } catch (err) {
+            clearTimeout(timeoutId);
             console.error("Unable to start scanner", err);
-            setError("Kameraga ulanishda xatolik yuz berdi. Iltimos, ruxsat berilganini tekshiring.");
+
+            let userFriendlyError = "Kameraga ulanishda xatolik yuz berdi.";
+            if (err.includes("NotAllowedError") || err.includes("Permission denied")) {
+                userFriendlyError = "Kameraga ruxsat berilmadi. Iltimos, brauzer sozlamalaridan ruxsat bering.";
+            } else if (err.includes("NotFoundError")) {
+                userFriendlyError = "Qurilmangizda kamera topilmadi.";
+            }
+
+            setError(userFriendlyError);
             setIsInitializing(false);
         }
     };
