@@ -7,20 +7,24 @@ const Scanner = ({ onScan, onClose }) => {
     const [isInitializing, setIsInitializing] = useState(false);
     const [error, setError] = useState(null);
     const [hasStarted, setHasStarted] = useState(false);
-    const [permissionState, setPermissionState] = useState('prompt'); // 'prompt', 'granted', 'denied'
+    const [diagnostics, setDiagnostics] = useState({ supported: 'checking...', devices: [] });
     const scannerRef = useRef(null);
 
     useEffect(() => {
-        // Check permission state on mount
-        if (navigator.permissions && navigator.permissions.query) {
-            navigator.permissions.query({ name: 'camera' })
-                .then(result => {
-                    setPermissionState(result.state);
-                    result.onchange = () => setPermissionState(result.state);
-                }).catch(err => {
-                    console.error("Permission query not supported", err);
-                });
-        }
+        const checkSupport = async () => {
+            const support = { supported: false, devices: [] };
+            if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                support.supported = true;
+                try {
+                    const devices = await navigator.mediaDevices.enumerateDevices();
+                    support.devices = devices.filter(d => d.kind === 'videoinput');
+                } catch (e) {
+                    console.error("Device enumeration failed", e);
+                }
+            }
+            setDiagnostics(support);
+        };
+        checkSupport();
     }, []);
 
     const startScanner = async () => {
@@ -151,16 +155,32 @@ const Scanner = ({ onScan, onClose }) => {
                             <Camera size={52} className="text-success" />
                         </div>
                         <h3 className="text-white fw-bold mb-3">Kamerani yoqing</h3>
-                        <p className="text-white-50 small mb-5">Skanerlashni boshlash uchun "Ruxsat Berish" tugmasini bosing va kameraga ruxsat bering.</p>
+                        <p className="text-white-50 small mb-4">Skanerlashni boshlash uchun "Ruxsat Berish" tugmasini bosing va kameraga ruxsat bering.</p>
+
+                        {/* Diagnostic Info */}
+                        <div className="bg-white bg-opacity-5 rounded-3 p-3 mb-4 text-start border border-white border-opacity-10">
+                            <p className="text-white-50 xs-small mb-1 fw-bold text-uppercase" style={{ fontSize: '10px' }}>Tizim holati:</p>
+                            <p className="text-white small mb-0" style={{ fontSize: '12px' }}>
+                                <span className={diagnostics.supported ? 'text-success' : 'text-danger'}>
+                                    ● {diagnostics.supported ? 'Kamera qo\'llab-quvvatlanadi' : 'Kamera topilmadi'}
+                                </span>
+                                <br />
+                                <span className="opacity-50">Kamerlar soni: {diagnostics.devices.length}ta</span>
+                            </p>
+                        </div>
+
                         <Button
                             variant="success"
                             size="lg"
-                            className="w-100 py-3 rounded-4 fw-black shadow-lg"
+                            className="w-100 py-3 rounded-4 fw-black shadow-lg mb-3"
                             onClick={startScanner}
                             disabled={isInitializing}
                         >
                             {isInitializing ? 'Yuklanmoqda...' : 'Ruxsat Berish & Skanerlash'}
                         </Button>
+                        <p className="text-white-50 small" style={{ fontSize: '10px' }}>
+                            Agar ruxsat so'ramasa, brauzeringizda <b>HTTPS</b> ishlayotganiga yoki <b>localhost</b> ekaniga ishonch hosil qiling.
+                        </p>
                     </div>
                 ) : (
                     <div className="position-relative w-100 overflow-hidden rounded-5 shadow-2xl bg-black" style={{ maxWidth: '400px', aspectRatio: '1/1' }}>
